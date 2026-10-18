@@ -1,9 +1,10 @@
 name: Run Telegram Bot 24/7
+
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   schedule:
-    - cron: '0 */6 * * *' # Перезапуск каждые 6 часов, чтобы обойти лимиты GitHub
+    - cron: '0 */6 * * *' # Автоматический перезапуск каждые 6 часов для обхода лимитов
 
 jobs:
   run-bot:
@@ -15,19 +16,16 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-env: '3.11'
+        python-version: '3.11'
 
     - name: Install dependencies
       run: |
         pip install pyTelegramBotAPI google-genai firebase-admin httpx
 
-        - name: Start Bot with Automated Loop
+    - name: Start Bot with Automated Loop
       env:
         BOT_API_TOKEN: ${{ secrets.BOT_API_TOKEN }}
         GEM_TOKEN: ${{ secrets.GEM_TOKEN }}
         FIREBASE_KEY_CONTENT: ${{ secrets.FIREBASE_KEY_CONTENT }}
       run: |
-        # Set a 5.5-hour execution limit inside the container (19800 seconds)
-        # This shuts down the bot cleanly right before GitHub terminates the job forcefully
         timeout 19800 python Bot.py || true
-

@@ -21,9 +21,13 @@ jobs:
       run: |
         pip install pyTelegramBotAPI google-genai firebase-admin httpx
 
-    - name: Start Bot
+        - name: Start Bot with Automated Loop
       env:
         BOT_API_TOKEN: ${{ secrets.BOT_API_TOKEN }}
         GEM_TOKEN: ${{ secrets.GEM_TOKEN }}
         FIREBASE_KEY_CONTENT: ${{ secrets.FIREBASE_KEY_CONTENT }}
-      run: python Bot.py
+      run: |
+        # Set a 5.5-hour execution limit inside the container (19800 seconds)
+        # This shuts down the bot cleanly right before GitHub terminates the job forcefully
+        timeout 19800 python Bot.py || true
+

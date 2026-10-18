@@ -3,7 +3,6 @@ from google import genai
 from google.genai import types
 import firebase_admin
 from firebase_admin import credentials, firestore
-from bot_secrets import secrets
 
 # =====================================================================
 # 1. НАСТРОЙКИ КЛИЕНТА GEMINI

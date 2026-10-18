@@ -1,0 +1,20 @@
+
+# Виртуальное окружение Python
+venv/
+.venv/
+env/
+.env
+
+# Кэш Python
+__pycache__/
+*.pyc
+
+# Файлы IDE (например, для VSCode или PyCharm)
+.vscode/
+.idea/
+
+# Файлы операционной системы (для macOS)
+.DS_Store
+
+bot_secrets.py
+firebase_key.json

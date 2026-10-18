@@ -1,26 +1,42 @@
-
+import os
 from google import genai
 from google.genai import types
 import firebase_admin
 from firebase_admin import credentials, firestore
 
 # =====================================================================
-# 1. НАСТРОЙКИ КЛИЕНТА GEMINI
+# 1. СМАРТ-ПОЛУЧЕНИЕ ТОКЕНА GEMINI (ДЛЯ ОБЛАКА И ЛОКАЛЬНО)
 # =====================================================================
-API_KEY = secrets.get("GEM_TOKEN")
+# Сначала проверяем переменную окружения GitHub Actions
+API_KEY = os.environ.get("GEM_TOKEN")
+
+# Если её нет (локальный запуск на ПК), берем из bot_secrets.py
+if not API_KEY:
+    try:
+        from bot_secrets import secrets
+        API_KEY = secrets.get("GEM_TOKEN")
+    except ImportError:
+        pass
+
 MODEL_ID = "gemini-3.5-flash-lite"  
 
 if API_KEY:
-    # Теперь клиент создается стандартно, он автоматически пойдет через os.environ
+    # В облаке GitHub Actions gRPC работает напрямую на высокой скорости без прокси
     ai_client = genai.Client(api_key=API_KEY)
 else:
-    print("ВНИМАНИЕ: Ключ GEM_TOKEN не найден в bot_secrets!")
+    print("ВНИМАНИЕ: Ключ GEM_TOKEN не найден ни в системе, ни в bot_secrets!")
     ai_client = None
 
 # =====================================================================
-# 2. ПОДКЛЮЧЕНИЕ К ОБЛАКУ FIREBASE FIRESTORE
+# 2. ПОДКЛЮЧЕНИЕ К ОБЛАКУ FIREBASE FIRESTORE С АВТО-СОЗДАНИЕМ КЛЮЧА
 # =====================================================================
 try:
+    # СПЕЦИАЛЬНЫЙ ФИКС ДЛЯ GITHUB ACTIONS:
+    # Если физического файла нет, воссоздаем его из секретов репозитория GitHub
+    if not os.path.exists("firebase_key.json") and os.environ.get("FIREBASE_KEY_CONTENT"):
+        with open("firebase_key.json", "w", encoding="utf-8") as f:
+            f.write(os.environ.get("FIREBASE_KEY_CONTENT"))
+
     cred = credentials.Certificate("firebase_key.json")
     firebase_admin.initialize_app(cred)
     db = firestore.client()
@@ -29,9 +45,13 @@ except Exception as e:
     print(f"Ошибка инициализации Firebase: {e}")
     db = None
 
-with open("./system_prompt.txt", mode='r', encoding='utf-8') as f:
+# Чтение системного промпта
+try:
+    with open("./system_prompt.txt", mode='r', encoding='utf-8') as f:
         SYSTEM_PROMPT = f.read().strip()
-
+except FileNotFoundError:
+    print("ВНИМАНИЕ: Файл system_prompt.txt не найден!")
+    SYSTEM_PROMPT = "Ты — полезный ИИ-ассистент."
 
 # =====================================================================
 # 3. ФУНКЦИИ ДЛЯ РАБОТЫ С БАЗОЙ ДАННЫХ
@@ -98,7 +118,7 @@ def delete_history(chat_id):
             doc.reference.delete()
         print(f"История чата {chat_id} успешно очищена в Firebase.")
     except Exception as e:
-        print(f"Ошибка удаления истории в Firebase: {e}")
+        print(f"Ошибка удаления истории in Firebase: {e}")
 
 # =====================================================================
 # 4. ФУНКЦИИ ДЛЯ ОБРАБОТКИ ЗАПРОСОВ К GEMINI

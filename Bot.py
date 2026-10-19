@@ -1,11 +1,12 @@
 import os
 import telebot
 from telebot import types
-
-# --- Import microservice functions ---
 from llm_service import process_user_message, delete_history, init_db
 
-BOT_TOKEN = os.environ.get("BOT_API_TOKEN")
+# --- Initialization ---
+try:
+    # First look up GitHub Secrets, then fallback to local file
+    BOT_TOKEN = os.environ.get("BOT_API_TOKEN")
     
     if not BOT_TOKEN:
         try:

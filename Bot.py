@@ -1,57 +1,92 @@
 import os
 import telebot
-from telebot import apihelper
-from telebot.util import smart_split
+from telebot import types
+
+# --- Import microservice functions ---
 from llm_service import process_user_message, delete_history, init_db
 
-
-
 BOT_TOKEN = os.environ.get("BOT_API_TOKEN")
-bot = telebot.TeleBot(BOT_TOKEN)
+    
+    if not BOT_TOKEN:
+        try:
+            from secrets import secrets
+            BOT_TOKEN = secrets.get('BOT_API_TOKEN')
+        except ImportError:
+            pass
+            
+    if not BOT_TOKEN:
+        raise ValueError("Токен бота не найден. Установите переменную окружения BOT_API_TOKEN.")
+        
+    bot = telebot.TeleBot(BOT_TOKEN)
+except ValueError as e:
+    print(e)
+    exit()
 
-# =====================================================================
-# 3. ИНИЦИАЛИЗАЦИЯ И ОБРАБОТЧИКИ КОМАНД
-# =====================================================================
+# --- Keyboard Setup (Must be defined BEFORE handlers use it!) ---
 BTN_RESET_TEXT = "RESET"
-# Инициализируем базу данных при старте
-init_db()
 
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    welcome_text = (
-        "Привет! Я твой персональный ИИ-ассистент по уходу за кожей. 🌟\n"
-        "Задай мне любой вопрос о подборе косметики, этапах ухода или типах кожи, и я помогу тебе разобраться!"
+def create_main_keyboard():
+    """Создает основную клавиатуру с кнопкой сброса."""
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    btn_reset = types.KeyboardButton(BTN_RESET_TEXT)
+    markup.add(btn_reset)
+    return markup
+
+# --- Command Handlers ---
+
+@bot.message_handler(commands=['start', 'help'])
+def start_message(message):
+    """Обработчик команд /start и /help."""
+    bot.send_message(
+        message.chat.id,
+        text=(
+            f"Привет, {message.from_user.first_name}! 🖖🏻\n"
+            "Я ваш личный виртуальный визажист на базе AI.\n\n"
+            "Задайте мне любой вопрос о макияже, и я постараюсь помочь.\n"
+            "Например: `Посоветуй, как скрыть темные круги под глазами.`\n\n"
+            "Чтобы начать диалог заново, используйте команду /reset или нажмите кнопку RESET."
+        ),
+        reply_markup=create_main_keyboard(),
+        parse_mode='Markdown'
     )
-    bot.reply_to(message, welcome_text)
 
-# --- ЕДИНЫЙ ОБРАБОТЧИК ДЛЯ ВСЕХ ТЕКСТОВЫХ СООБЩЕНИЙ В BOT.PY ---
+@bot.message_handler(commands=['reset'])
+def reset_history_command(message):
+    """Сбрасывает историю диалога по команде /reset."""
+    chat_id = message.chat.id
+    delete_history(chat_id)
+    bot.reply_to(
+        message, 
+        "✅ История нашего диалога очищена. Можем начать всё с чистого листа!",
+        reply_markup=create_main_keyboard()
+    )
+
+# --- Main Message Handler for Text and Buttons ---
 @bot.message_handler(content_types=['text'])
 def handle_all_text(message):
     text = message.text
     chat_id = message.chat.id
 
-    # 1. Сначала проверяем, не является ли текст нажатием кнопки RESET
+    # 1. Intercept the RESET button click immediately
     if text == BTN_RESET_TEXT:
-        delete_history(chat_id)  # Чистим базу данных напрямую
+        delete_history(chat_id)
         bot.send_message(
             chat_id,
             text="✅ История нашего диалога очищена. Можем начать всё с чистого листа!",
             reply_markup=create_main_keyboard()
         )
-        return  # 🌟 ВАЖНО: Выходим из функции, чтобы код ниже НЕ выполнялся!
+        return  # Exit early so it doesn't pass "RESET" text to Gemini!
 
-    # 2. Если это не кнопка, проверяем на случайные команды
+    # 2. Ignore stray commands handled above
     if text.startswith('/'):
         bot.reply_to(message, "Пожалуйста, используйте команды без дополнительного текста или просто задайте вопрос.")
         return
 
-    # 3. Если это обычный вопрос к AI
+    # 3. Process normal questions through Gemini
     thinking_message = bot.send_message(chat_id, "💄 Думаю над вашим вопросом...")
-    
-    # Только здесь вызываем оркестратор для работы с Gemini
     response_text = process_user_message(chat_id, user_question=text)
     
-    # Безопасно выводим ответ (с защитой от слишком длинных сообщений)
+    # Securely edit or send message to avoid length crashes
     try:
         bot.edit_message_text(
             chat_id=chat_id, 
@@ -63,8 +98,8 @@ def handle_all_text(message):
         bot.delete_message(chat_id, thinking_message.message_id)
         bot.send_message(chat_id, response_text, parse_mode="Markdown")
 
-
-if __name__ == "__main__":
-    print("Telegram-бот успешно запущен и слушает сообщения...")
+# --- Bot Runtime Execution ---
+if __name__ == '__main__':
+    init_db()
+    print("Бот-визажист успешно запущен и слушает сообщения...")
     bot.infinity_polling(timeout=60, long_polling_timeout=5)
-

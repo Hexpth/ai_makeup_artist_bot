@@ -49,4 +49,5 @@ def handle_messages(message):
 
 if __name__ == "__main__":
     print("Telegram-бот успешно запущен и слушает сообщения...")
-    bot.infinity_polling()
+    bot.infinity_polling(timeout=60, long_polling_timeout=5)
+

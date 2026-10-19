@@ -23,29 +23,45 @@ def send_welcome(message):
     )
     bot.reply_to(message, welcome_text)
 
-@bot.message_handler(func=lambda message: True)
-def handle_messages(message):
+# --- ЕДИНЫЙ ОБРАБОТЧИК ДЛЯ ВСЕХ ТЕКСТОВЫХ СООБЩЕНИЙ В BOT.PY ---
+@bot.message_handler(content_types=['text'])
+def handle_all_text(message):
+    text = message.text
     chat_id = message.chat.id
-    user_text = message.text
 
-    # Показываем плашку "печатает...", пока Gemini думает над ответом
-    bot.send_chat_action(chat_id, action='typing')
-
-    try:
-        # Передаем управление в llm_service.py (он запишет всё в Firebase и вернет ответ)
-        ai_response = process_user_message(chat_id, user_text)
-
-        # Режем длинные тексты (защита от ошибки MESSAGE_TOO_LONG в Telegram)
-        chunks = smart_split(ai_response, chars_per_string=3500)
-        for chunk in chunks:
-            bot.send_message(chat_id, chunk, parse_mode="Markdown")
-
-    except Exception as e:
-        print(f"Ошибка при обработке сообщения в чате {chat_id}: {e}")
+    # 1. Сначала проверяем, не является ли текст нажатием кнопки RESET
+    if text == BTN_RESET_TEXT:
+        delete_history(chat_id)  # Чистим базу данных напрямую
         bot.send_message(
-            chat_id, 
-            "Извини, произошла техническая ошибка при обработке запроса. Пожалуйста, попробуй еще раз чуть позже."
+            chat_id,
+            text="✅ История нашего диалога очищена. Можем начать всё с чистого листа!",
+            reply_markup=create_main_keyboard()
         )
+        return  # 🌟 ВАЖНО: Выходим из функции, чтобы код ниже НЕ выполнялся!
+
+    # 2. Если это не кнопка, проверяем на случайные команды
+    if text.startswith('/'):
+        bot.reply_to(message, "Пожалуйста, используйте команды без дополнительного текста или просто задайте вопрос.")
+        return
+
+    # 3. Если это обычный вопрос к AI
+    thinking_message = bot.send_message(chat_id, "💄 Думаю над вашим вопросом...")
+    
+    # Только здесь вызываем оркестратор для работы с Gemini
+    response_text = process_user_message(chat_id, user_question=text)
+    
+    # Безопасно выводим ответ (с защитой от слишком длинных сообщений)
+    try:
+        bot.edit_message_text(
+            chat_id=chat_id, 
+            message_id=thinking_message.message_id, 
+            text=response_text,
+            parse_mode="Markdown"
+        )
+    except Exception:
+        bot.delete_message(chat_id, thinking_message.message_id)
+        bot.send_message(chat_id, response_text, parse_mode="Markdown")
+
 
 if __name__ == "__main__":
     print("Telegram-бот успешно запущен и слушает сообщения...")

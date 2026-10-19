@@ -21,11 +21,22 @@ jobs:
     - name: Install dependencies
       run: |
         pip install pyTelegramBotAPI google-genai firebase-admin httpx
-
     - name: Start Bot with Automated Loop
       env:
         BOT_API_TOKEN: ${{ secrets.BOT_API_TOKEN }}
         GEM_TOKEN: ${{ secrets.GEM_TOKEN }}
         FIREBASE_KEY_CONTENT: ${{ secrets.FIREBASE_KEY_CONTENT }}
       run: |
-        timeout 19800 python Bot.py || true
+        # Запускаем фоновый таймер, который мягко завершит процесс через 5 часов 40 минут (20400 сек)
+        # Это не даст GitHub принудительно оборвать воркфлоу на 6-м часе
+        PID=$$
+        (sleep 20400 && echo "Время воркфлоу на исходе, мягкая перезагрузка..." && kill -INT $PID) &
+
+        echo "Запуск бота в режиме бесконечного авторестарта..."
+        
+        # Бесконечный цикл: если бот упадет от сетевой ошибки API или таймаута, он сразу поднимется сам
+        while true; do
+          python Bot.py
+          echo "Бот упал или был остановлен. Перезапуск через 5 секунд..."
+          sleep 5
+        done

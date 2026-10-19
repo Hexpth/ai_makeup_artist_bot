@@ -2,7 +2,8 @@ import os
 import telebot
 from telebot import apihelper
 from telebot.util import smart_split
-from llm_service import process_user_message, init_db
+from llm_service import process_user_message, delete_history, init_db
+
 
 
 BOT_TOKEN = os.environ.get("BOT_API_TOKEN")

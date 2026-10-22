@@ -18,3 +18,5 @@ __pycache__/
 
 bot_secrets.py
 firebase_key.json
+system_prompt.txt 
+ai_makeup_artist_bot-main.zip

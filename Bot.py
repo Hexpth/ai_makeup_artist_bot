@@ -1,6 +1,7 @@
 import os
 import telebot
 from telebot import types
+import time  # Добавлен импорт time для стабильной работы пуллинга в цикле
 from llm_service import process_user_message, delete_history, init_db
 
 # --- Initialization ---
@@ -45,6 +46,8 @@ def start_message(message):
             "Я ваш личный виртуальный визажист на базе AI.\n\n"
             "Задайте мне любой вопрос о макияже, и я постараюсь помочь.\n"
             "Например: `Посоветуй, как скрыть темные круги под глазами.`\n\n"
+            "Также вы можете **отправить мне фотографию** (например, селфи или косметику) "
+            "и написать свой вопрос в подписи к ней!\n\n"
             "Чтобы начать диалог заново, используйте команду /reset или нажмите кнопку RESET."
         ),
         reply_markup=create_main_keyboard(),
@@ -61,6 +64,43 @@ def reset_history_command(message):
         "✅ История нашего диалога очищена. Можем начать всё с чистого листа!",
         reply_markup=create_main_keyboard()
     )
+
+# --- Handler for Photos ---
+@bot.message_handler(content_types=['photo'])
+def handle_photo(message):
+    chat_id = message.chat.id
+    
+    # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если подписи к фото нет, ставим дефолтный текст, 
+    # чтобы предотвратить передачу None в ИИ-сервис
+    user_text = message.caption if message.caption else "Проанализируй это изображение и дай экспертную консультацию."
+
+    thinking_message = bot.send_message(chat_id, "💄 Рассматриваю ваше фото и думаю над вопросом...")
+
+    try:
+        # Получаем file_id самого качественного варианта фото
+        file_id = message.photo[-1].file_id
+        file_info = bot.get_file(file_id)
+        
+        # Скачиваем файл напрямую в бинарный поток (байты) в ОЗУ
+        image_bytes = bot.download_file(file_info.file_path)
+        
+        # Передаем в Gemini байты изображения и гарантированный текст
+        response_text = process_user_message(chat_id, user_question=user_text, image_bytes=image_bytes)
+    except Exception as e:
+        print(f"Ошибка при обработке фото: {e}")
+        response_text = "⚠️ Не удалось обработать изображение. Пожалуйста, попробуйте отправить его еще раз."
+
+    # Безопасная отправка ответа
+    try:
+        bot.edit_message_text(
+            chat_id=chat_id, 
+            message_id=thinking_message.message_id, 
+            text=response_text,
+            parse_mode="Markdown"
+        )
+    except Exception:
+        bot.delete_message(chat_id, thinking_message.message_id)
+        bot.send_message(chat_id, response_text, parse_mode="Markdown")
 
 # --- Main Message Handler for Text and Buttons ---
 @bot.message_handler(content_types=['text'])

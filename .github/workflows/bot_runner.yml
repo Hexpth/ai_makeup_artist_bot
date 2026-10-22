@@ -10,6 +10,9 @@ jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
+    - name: Create system prompt file
+      run: echo "${{ secrets.SYSTEM_PROMPT }}" > system_prompt.txt
+      
     - name: Checkout code
       uses: actions/checkout@v3
 
